@@ -558,23 +558,25 @@ export default {
 .main-header {
   background: rgba(20, 20, 20, 0.95);
   backdrop-filter: blur(10px);
-  padding: 20px 40px;
+  padding: 20px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #333;
   position: sticky;
-  top: 0;
-  z-index: 100;
+  top: 0px;
+  z-index: 1;
+  width: 100vw;
 }
 
-.header-left h1 {
-  margin: 0;
-  font-size: 2rem;
-  background: linear-gradient(45deg, #4a9eff, #6b46c1);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+.header-left {
+  text-align: center;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+body {
+  overflow-x: hidden;
 }
 
 .welcome-text {
@@ -584,8 +586,8 @@ export default {
 }
 
 .header-right {
-  display: flex;
-  align-items: center;
+  position: absolute;
+  right: 40px;
 }
 
 .user-info {
@@ -1363,267 +1365,5 @@ export default {
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-right: 10px;
-}
-
-@media (max-width: 1024px) {
-  .images-grid-full {
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-  }
-  
-  .image-card-full {
-    height: 50px;
-  }
-  
-  .image-wrapper {
-    height: 400px;
-  }
-  
-  .modal-body {
-    grid-template-columns: 2fr 1.5fr;
-  }
-}
-
-@media (max-width: 900px) {
-  .modal-body {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr 1fr;
-  }
-  
-  .image-section {
-    border-right: none;
-    border-bottom: 1px solid #333;
-    max-height: 50vh;
-  }
-  
-  .image-container {
-    max-height: 40vh;
-  }
-  
-  .modal-content.dark-modal {
-    height: 90vh;
-    max-height: 90vh;
-  }
-  
-  .likes-section-modal {
-    margin-top: 15px;
-    padding: 12px;
-  }
-  
-  .likes-section-modal h4 {
-    font-size: 0.9rem;
-  }
-}
-
-@media (max-width: 768px) {
-  .images-grid-full {
-    grid-template-columns: 1fr;
-    max-width: 500px;
-    margin: 0 auto;
-  }
-  
-  .image-card-full {
-    height: 450px;
-  }
-  
-  .image-wrapper {
-    height: 350px;
-  }
-  
-  .upload-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .file-label, .upload-button {
-    width: 100%;
-    text-align: center;
-  }
-  
-  .user-info {
-    width: 100%;
-    justify-content: center;
-  }
-  
-  .main-header {
-    flex-direction: column;
-    gap: 15px;
-    text-align: center;
-    padding: 15px 20px;
-  }
-  
-  .header-left h1 {
-    font-size: 1.5rem;
-  }
-  
-  .upload-section {
-    margin: 15px;
-    padding: 20px;
-  }
-  
-  .modal-overlay {
-    padding: 5px;
-  }
-  
-  .modal-content.dark-modal {
-    width: 100%;
-    height: 100vh;
-    max-height: 100vh;
-    border-radius: 0;
-  }
-}
-
-@media (max-width: 576px) {
-  .upload-section,
-  .modal-content.dark-modal {
-    padding: 15px;
-    margin: 10px;
-  }
-  
-  .image-card-full {
-    height: 400px;
-  }
-  
-  .image-wrapper {
-    height: 300px;
-  }
-  
-  .modal-header,
-  .comments-header,
-  .image-section,
-  .comments-list,
-  .add-comment,
-  .modal-footer {
-    padding: 12px 15px;
-  }
-  
-  .comment-item {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .comment-avatar {
-    margin-bottom: 8px;
-  }
-  
-  .image-details {
-    padding: 12px;
-  }
-  
-  .detail-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 5px;
-  }
-  
-  .like-button-modal {
-    align-self: flex-start;
-  }
-  
-  .likes-section-modal {
-    margin-top: 10px;
-    padding: 10px;
-  }
-  
-  .likes-list {
-    font-size: 0.8rem;
-  }
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 20px;
-  color: #888;
-}
-
-.empty-state h3 {
-  margin: 0 0 15px 0;
-  font-size: 1.2rem;
-}
-
-.empty-state p {
-  margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.5;
-}
-
-.image-overlay::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
-  z-index: -1;
-}
-
-@media (max-width: 400px) {
-  .like-button {
-    padding: 6px 12px;
-    font-size: 0.85rem;
-  }
-  
-  .like-icon {
-    font-size: 1rem;
-  }
-  
-  .like-button-modal {
-    padding: 5px 10px;
-    font-size: 0.8rem;
-  }
-}
-
-.image-card-full:hover .likes-section .like-button:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.like-button.liked:hover:not(:disabled) {
-  background: rgba(255, 20, 60, 0.3);
-  border-color: #ff2e7c;
-}
-
-.like-button:disabled::after {
-  content: 'Нужна авторизация';
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.9);
-  color: white;
-  padding: 5px 10px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s;
-  z-index: 100;
-}
-
-.like-button:disabled:hover::after {
-  opacity: 1;
-}
-
-.like-button-modal:disabled::after {
-  content: 'Нужна авторизация';
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.9);
-  color: white;
-  padding: 5px 10px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s;
-  z-index: 100;
-}
-
-.like-button-modal:disabled:hover::after {
-  opacity: 1;
 }
 </style>

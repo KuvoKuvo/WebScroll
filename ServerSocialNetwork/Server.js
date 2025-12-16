@@ -416,7 +416,6 @@ app.get('/images/:id/comments', (req, res) => {
   });
 });
 
-// Добавление комментария
 app.post('/images/:id/comments', (req, res) => {
   const imageId = req.params.id;
   const { userId, text } = req.body;
@@ -435,7 +434,6 @@ app.post('/images/:id/comments', (req, res) => {
         return res.status(500).json({ message: 'Ошибка сервера' });
       }
       
-      // Получаем созданный комментарий с именем пользователя
       db.get(`
         SELECT 
           Comments.*,
@@ -449,7 +447,6 @@ app.post('/images/:id/comments', (req, res) => {
           return res.status(500).json({ message: 'Ошибка сервера' });
         }
         
-        // Отправляем комментарий через WebSocket всем клиентам
         wss.clients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({
@@ -468,12 +465,10 @@ app.post('/images/:id/comments', (req, res) => {
   );
 });
 
-// Запуск сервера
 const server = app.listen(3000, () => {
   console.log('Сервер запущен на http://localhost:3000');
 });
 
-// WebSocket сервер
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
@@ -483,7 +478,6 @@ wss.on('connection', (ws) => {
     try {
       const data = JSON.parse(message);
 
-      // Аутентификация через WebSocket
       if (data.type === 'auth') {
         const userId = data.userId;
         db.get("select * from Users where Id = ?", [userId], (err, user) => {
@@ -497,7 +491,6 @@ wss.on('connection', (ws) => {
         });
       }
 
-      // Отправка сообщения (комментария)
       if (data.type === 'message') {
         const user = sessions.get(ws);
         if (!user) {
@@ -517,13 +510,11 @@ wss.on('connection', (ws) => {
         });
       }
 
-      // Подписка на комментарии для конкретного изображения
       if (data.type === 'subscribe-comments') {
         const { imageId } = data;
         ws.subscribedImageId = imageId;
       }
 
-      // Обработка обновления лайков через WebSocket
       if (data.type === 'like-updated') {
         wss.clients.forEach(client => {
           if (client.readyState === WebSocket.OPEN) {
