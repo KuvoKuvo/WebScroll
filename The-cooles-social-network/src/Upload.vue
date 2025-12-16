@@ -1,6 +1,5 @@
 <template>
   <div class="upload-container">
-    <!-- Хедер -->
     <header class="main-header">
       <div class="header-left">
         <h1>📸 Фотогалерея</h1>
@@ -16,7 +15,6 @@
       </div>
     </header>
 
-    <!-- Загрузка изображений -->
     <div v-if="isAdmin" class="upload-section">
       <h2>Загрузить изображение</h2>
       <div class="upload-controls">
@@ -38,7 +36,6 @@
       <p v-if="uploadMessage" class="upload-message">{{ uploadMessage }}</p>
     </div>
 
-    <!-- Лента изображений -->
     <div class="images-container">
       <div class="images-grid-full">
         <div 
@@ -71,7 +68,6 @@
               <p class="image-date">{{ formatDate(image.UploadedAt) }}</p>
             </div>
             
-            <!-- Кнопка лайка -->
             <div class="likes-section">
               <button 
                 @click.stop="toggleLike(image)"
@@ -90,7 +86,6 @@
       </div>
     </div>
 
-    <!-- Модальное окно с изображением и комментариями -->
     <div v-if="selectedImage" class="modal-overlay" @click.self="closeModal">
       <div class="modal-content dark-modal">
         <div class="modal-header">
@@ -101,7 +96,6 @@
         </div>
         
         <div class="modal-body">
-          <!-- Изображение слева -->
           <div class="image-section">
             <div class="image-container">
               <img 
@@ -141,7 +135,6 @@
               </div>
             </div>
             
-            <!-- Секция со списком лайков -->
             <div class="likes-section-modal" v-if="likesList.length > 0">
               <h4>❤️ Пользователи, поставившие лайк:</h4>
               <div class="likes-list">
@@ -152,7 +145,6 @@
             </div>
           </div>
 
-          <!-- Комментарии справа -->
           <div class="comments-section">
             <div class="comments-header">
               <h3>💬 Комментарии</h3>
@@ -181,7 +173,6 @@
               </div>
             </div>
 
-            <!-- Форма добавления комментария -->
             <div class="add-comment">
               <div class="comment-input-container">
                 <textarea 
@@ -205,7 +196,6 @@
           </div>
         </div>
 
-        <!-- Кнопка закрытия -->
         <div class="modal-footer">
           <button @click="closeModal" class="back-button">
             ← Вернуться в ленту просмотра
@@ -214,7 +204,6 @@
       </div>
     </div>
 
-    <!-- Уведомления -->
     <div v-if="message" class="notification">
       {{ message }}
     </div>
@@ -329,7 +318,6 @@ export default {
       this.setupWebSocketSubscription(image.Id);
       this.scrollToTop();
       
-      // Даем время на загрузку изображения
       setTimeout(() => {
         this.centerModalImage();
       }, 100);
@@ -376,10 +364,8 @@ export default {
         
         const data = await res.json();
         if (res.ok) {
-          // Очищаем поле ввода
           this.newComment = '';
           
-          // Фокус на поле ввода
           if (this.$refs.commentInput) {
             this.$refs.commentInput.focus();
           }
@@ -410,15 +396,12 @@ export default {
         
         const data = await res.json();
         if (res.ok) {
-          // Обновляем данные изображения
           image.userLiked = data.liked;
           image.likeCount = data.totalLikes;
           
-          // Если это открытое изображение в модалке, обновляем и его
           if (this.selectedImage && this.selectedImage.Id === image.Id) {
             this.selectedImage.userLiked = data.liked;
             this.selectedImage.likeCount = data.totalLikes;
-            // Загружаем список пользователей, поставивших лайк
             await this.fetchLikesList(image.Id);
           }
         }
@@ -471,7 +454,6 @@ export default {
           
           if (data.type === 'new-comment') {
             if (data.comment && data.comment.ImageId === this.currentImageId) {
-              // Проверяем, нет ли уже такого комментария
               const commentExists = this.comments.some(c => c.Id === data.comment.Id);
               if (!commentExists) {
                 this.comments.unshift(data.comment);
@@ -479,18 +461,14 @@ export default {
             }
           }
           
-          // Обработка обновления лайков
           if (data.type === 'like-updated') {
-            // Обновляем в списке изображений
             const imageIndex = this.images.findIndex(img => img.Id === data.imageId);
             if (imageIndex !== -1) {
               this.images[imageIndex].likeCount = data.totalLikes;
             }
-            
-            // Обновляем в модальном окне если открыто
+
             if (this.selectedImage && this.selectedImage.Id === data.imageId) {
               this.selectedImage.likeCount = data.totalLikes;
-              // Перезагружаем список лайков
               this.fetchLikesList(data.imageId);
             }
           }
@@ -750,7 +728,7 @@ export default {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  height: 450px;
+  height: 550px;
 }
 
 .image-card-full:hover {
@@ -957,7 +935,6 @@ export default {
   transform: translateY(-1px);
 }
 
-/* Модальное окно - ИСПРАВЛЕННЫЙ РАЗМЕР */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -1388,18 +1365,17 @@ export default {
   margin-right: 10px;
 }
 
-/* Адаптивность */
 @media (max-width: 1024px) {
   .images-grid-full {
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
   }
   
   .image-card-full {
-    height: 420px;
+    height: 50px;
   }
   
   .image-wrapper {
-    height: 320px;
+    height: 400px;
   }
   
   .modal-body {
@@ -1553,7 +1529,6 @@ export default {
   }
 }
 
-/* Стили для пустого состояния */
 .empty-state {
   text-align: center;
   padding: 60px 20px;
@@ -1571,7 +1546,6 @@ export default {
   line-height: 1.5;
 }
 
-/* Тень для лучшей читаемости текста на изображениях */
 .image-overlay::before {
   content: '';
   position: absolute;
@@ -1583,7 +1557,6 @@ export default {
   z-index: -1;
 }
 
-/* Улучшенные стили для кнопки лайка на маленьких экранах */
 @media (max-width: 400px) {
   .like-button {
     padding: 6px 12px;
@@ -1600,19 +1573,16 @@ export default {
   }
 }
 
-/* Дополнительные эффекты при наведении */
 .image-card-full:hover .likes-section .like-button:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-/* Стили для состояния "нравится" */
 .like-button.liked:hover:not(:disabled) {
   background: rgba(255, 20, 60, 0.3);
   border-color: #ff2e7c;
 }
 
-/* Стили для индикатора загрузки при наведении на лайк */
 .like-button:disabled::after {
   content: 'Нужна авторизация';
   position: absolute;
@@ -1635,7 +1605,6 @@ export default {
   opacity: 1;
 }
 
-/* Тот же эффект для модальной версии */
 .like-button-modal:disabled::after {
   content: 'Нужна авторизация';
   position: absolute;
