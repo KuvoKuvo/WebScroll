@@ -35,25 +35,6 @@ const db = new sqlite3.Database('этоБаза.db', (err) => {
     console.error('Ошибка подключения к БД:', err);
   } else {
     console.log('Подключено к SQLite базе данных');
-    
-    // Создаем таблицу Comments если ее нет
-    db.run(`
-      CREATE TABLE IF NOT EXISTS Comments (
-        Id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ImageId INTEGER,
-        UserId INTEGER,
-        Text TEXT,
-        CreatedAt INTEGER,
-        FOREIGN KEY (ImageId) REFERENCES Images(Id) ON DELETE CASCADE,
-        FOREIGN KEY (UserId) REFERENCES Users(Id)
-      )
-    `, (err) => {
-      if (err) {
-        console.error('Ошибка создания таблицы Comments:', err);
-      } else {
-        console.log('Таблица Comments создана/проверена');
-      }
-    });
   }
 });
 
@@ -138,7 +119,9 @@ app.post('/upload', upload.single('image'), (req, res) => {
           fileshka: req.file.filename,
           UserId: user.Id,
           UserName: user.Name,
-          UploadedAt: Date.now()
+          UploadedAt: Date.now(),
+          likeCount: 0,
+          userLiked: false
         };
 
         // Отправляем через WebSocket всем клиентам
@@ -161,29 +144,222 @@ app.post('/upload', upload.single('image'), (req, res) => {
   });
 });
 
-// Получение всех изображений
+// Получение всех изображений (с лайками)
 app.get('/images', (req, res) => {
-  db.all(
-    `
+  const userId = req.headers['x-user-id'];
+  
+  const query = `
     SELECT
       Images.Id,
       Images.Filenshka AS fileshka,
       Images.UserId,
       Users.Name AS UserName,
-      Images.UploadedAt
+      Images.UploadedAt,
+      (SELECT COUNT(*) FROM Likes WHERE Likes.ImageId = Images.Id) as likeCount
     FROM Images
     LEFT JOIN Users ON Users.Id = Images.UserId
     ORDER BY Images.UploadedAt DESC
-    `,
-    [],
-    (err, rows) => {
+  `;
+  
+  db.all(query, [], (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Ошибка сервера' });
+    }
+    
+    // Если пользователь авторизован, проверяем его лайки
+    if (userId) {
+      // Получаем все лайки пользователя одним запросом
+      const imageIds = rows.map(row => row.Id);
+      if (imageIds.length > 0) {
+        const placeholders = imageIds.map(() => '?').join(',');
+        db.all(
+          `SELECT ImageId FROM Likes WHERE UserId = ? AND ImageId IN (${placeholders})`,
+          [userId, ...imageIds],
+          (err, userLikes) => {
+            if (err) {
+              console.error(err);
+              return res.status(500).json({ message: 'Ошибка сервера' });
+            }
+            
+            const likedImageIds = new Set(userLikes.map(like => like.ImageId));
+            
+            rows.forEach(row => {
+              row.userLiked = likedImageIds.has(row.Id);
+            });
+            
+            res.json(rows);
+          }
+        );
+      } else {
+        res.json(rows);
+      }
+    } else {
+      rows.forEach(row => {
+        row.userLiked = false;
+      });
+      res.json(rows);
+    }
+  });
+});
+
+// Получение информации о лайках для конкретного изображения
+app.get('/images/:id/likes', (req, res) => {
+  const imageId = req.params.id;
+  const userId = req.headers['x-user-id'];
+  
+  // Получаем общее количество лайков
+  db.get('SELECT COUNT(*) as count FROM Likes WHERE ImageId = ?', [imageId], (err, totalResult) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Ошибка сервера' });
+    }
+    
+    // Проверяем, поставил ли текущий пользователь лайк
+    if (userId) {
+      db.get('SELECT Id FROM Likes WHERE ImageId = ? AND UserId = ?', [imageId, userId], (err, userLike) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ message: 'Ошибка сервера' });
+        }
+        
+        res.json({
+          totalLikes: totalResult.count,
+          userLiked: !!userLike,
+          likeId: userLike ? userLike.Id : null
+        });
+      });
+    } else {
+      res.json({
+        totalLikes: totalResult.count,
+        userLiked: false,
+        likeId: null
+      });
+    }
+  });
+});
+
+// Добавление/удаление лайка
+app.post('/images/:id/like', (req, res) => {
+  const imageId = req.params.id;
+  const userId = req.body.userId;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Не авторизован' });
+  }
+  
+  // Проверяем, существует ли изображение
+  db.get('SELECT Id FROM Images WHERE Id = ?', [imageId], (err, image) => {
+    if (!image) {
+      return res.status(404).json({ message: 'Изображение не найдено' });
+    }
+    
+    // Проверяем, не поставил ли уже пользователь лайк
+    db.get('SELECT Id FROM Likes WHERE ImageId = ? AND UserId = ?', [imageId, userId], (err, existingLike) => {
       if (err) {
         console.error(err);
         return res.status(500).json({ message: 'Ошибка сервера' });
       }
-      res.json(rows);
+      
+      if (existingLike) {
+        // Если лайк уже есть - удаляем его (дизлайк)
+        db.run('DELETE FROM Likes WHERE Id = ?', [existingLike.Id], function(err) {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Ошибка сервера' });
+          }
+          
+          // Получаем обновленное количество лайков
+          db.get('SELECT COUNT(*) as count FROM Likes WHERE ImageId = ?', [imageId], (err, result) => {
+            if (err) {
+              console.error(err);
+              return res.status(500).json({ message: 'Ошибка сервера' });
+            }
+            
+            // Отправляем через WebSocket
+            wss.clients.forEach(client => {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                  type: 'like-updated',
+                  imageId: imageId,
+                  totalLikes: result.count,
+                  action: 'unlike'
+                }));
+              }
+            });
+            
+            res.json({
+              message: 'Лайк удален',
+              liked: false,
+              totalLikes: result.count
+            });
+          });
+        });
+      } else {
+        // Если лайка нет - добавляем
+        db.run(
+          'INSERT INTO Likes (ImageId, UserId, CreatedAt) VALUES (?, ?, ?)',
+          [imageId, userId, Date.now()],
+          function(err) {
+            if (err) {
+              console.error(err);
+              return res.status(500).json({ message: 'Ошибка сервера' });
+            }
+            
+            // Получаем обновленное количество лайков
+            db.get('SELECT COUNT(*) as count FROM Likes WHERE ImageId = ?', [imageId], (err, result) => {
+              if (err) {
+                console.error(err);
+                return res.status(500).json({ message: 'Ошибка сервера' });
+              }
+              
+              // Отправляем через WebSocket
+              wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                  client.send(JSON.stringify({
+                    type: 'like-updated',
+                    imageId: imageId,
+                    totalLikes: result.count,
+                    action: 'like'
+                  }));
+                }
+              });
+              
+              res.json({
+                message: 'Лайк добавлен',
+                liked: true,
+                totalLikes: result.count
+              });
+            });
+          }
+        );
+      }
+    });
+  });
+});
+
+// Получение списка пользователей, поставивших лайк (опционально)
+app.get('/images/:id/likes-list', (req, res) => {
+  const imageId = req.params.id;
+  
+  db.all(`
+    SELECT 
+      Likes.Id,
+      Likes.UserId,
+      Users.Name as UserName,
+      Likes.CreatedAt
+    FROM Likes
+    LEFT JOIN Users ON Users.Id = Likes.UserId
+    WHERE Likes.ImageId = ?
+    ORDER BY Likes.CreatedAt DESC
+    LIMIT 50
+  `, [imageId], (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Ошибка сервера' });
     }
-  );
+    res.json(rows);
+  });
 });
 
 // Удаление изображения
@@ -345,6 +521,20 @@ wss.on('connection', (ws) => {
       if (data.type === 'subscribe-comments') {
         const { imageId } = data;
         ws.subscribedImageId = imageId;
+      }
+
+      // Обработка обновления лайков через WebSocket
+      if (data.type === 'like-updated') {
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'like-updated',
+              imageId: data.imageId,
+              totalLikes: data.totalLikes,
+              action: data.action
+            }));
+          }
+        });
       }
 
     } catch (e) {

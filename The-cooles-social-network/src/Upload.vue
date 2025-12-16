@@ -66,8 +66,25 @@
             </div>
           </div>
           <div class="image-info-full">
-            <p class="image-author"><strong>{{ image.UserName }}</strong></p>
-            <p class="image-date">{{ formatDate(image.UploadedAt) }}</p>
+            <div class="image-header">
+              <p class="image-author"><strong>{{ image.UserName }}</strong></p>
+              <p class="image-date">{{ formatDate(image.UploadedAt) }}</p>
+            </div>
+            
+            <!-- Кнопка лайка -->
+            <div class="likes-section">
+              <button 
+                @click.stop="toggleLike(image)"
+                :class="['like-button', { 'liked': image.userLiked }]"
+                :disabled="!user"
+                :title="!user ? 'Для лайков нужно авторизоваться' : ''"
+              >
+                <span class="like-icon">
+                  {{ image.userLiked ? '❤️' : '🤍' }}
+                </span>
+                <span class="like-count">{{ image.likeCount || 0 }}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -107,6 +124,30 @@
               <div class="detail-item">
                 <span class="detail-label">💬 Комментариев:</span>
                 <span class="detail-value">{{ comments.length }}</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">❤️ Лайков:</span>
+                <button 
+                  @click="toggleLikeModal"
+                  :class="['like-button-modal', { 'liked': selectedImage.userLiked }]"
+                  :disabled="!user"
+                  :title="!user ? 'Для лайков нужно авторизоваться' : ''"
+                >
+                  <span class="like-icon">
+                    {{ selectedImage.userLiked ? '❤️' : '🤍' }}
+                  </span>
+                  <span class="like-count">{{ selectedImage.likeCount || 0 }}</span>
+                </button>
+              </div>
+            </div>
+            
+            <!-- Секция со списком лайков -->
+            <div class="likes-section-modal" v-if="likesList.length > 0">
+              <h4>❤️ Пользователи, поставившие лайк:</h4>
+              <div class="likes-list">
+                <span v-for="(like, index) in likesList" :key="like.Id" class="like-user">
+                  {{ like.UserName }}{{ index < likesList.length - 1 ? ', ' : '' }}
+                </span>
               </div>
             </div>
           </div>
@@ -194,7 +235,9 @@ export default {
       ws: null,
       user: null,
       isAddingComment: false,
-      currentImageId: null // Для отслеживания текущего изображения
+      currentImageId: null,
+      likesList: [],
+      isLoadingLikes: false
     };
   },
   computed: {
@@ -231,7 +274,12 @@ export default {
     },
     async fetchImages() {
       try {
-        const res = await fetch('http://localhost:3000/images');
+        const headers = {};
+        if (this.user && this.user.id) {
+          headers['X-User-Id'] = this.user.id;
+        }
+        
+        const res = await fetch('http://localhost:3000/images', { headers });
         const data = await res.json();
         if (res.ok) {
           this.images = data;
@@ -275,8 +323,9 @@ export default {
     },
     async openImageModal(image) {
       this.selectedImage = image;
-      this.currentImageId = image.Id; // Сохраняем ID текущего изображения
+      this.currentImageId = image.Id;
       await this.fetchComments(image.Id);
+      await this.fetchLikesList(image.Id);
       this.setupWebSocketSubscription(image.Id);
       this.scrollToTop();
       
@@ -296,6 +345,7 @@ export default {
       this.newComment = '';
       this.currentImageId = null;
       this.isAddingComment = false;
+      this.likesList = [];
     },
     async fetchComments(imageId) {
       try {
@@ -344,14 +394,71 @@ export default {
         this.isAddingComment = false;
       }
     },
+    async toggleLike(image) {
+      if (!this.user) {
+        this.message = 'Для лайков нужно авторизоваться';
+        setTimeout(() => this.message = '', 3000);
+        return;
+      }
+      
+      try {
+        const res = await fetch(`http://localhost:3000/images/${image.Id}/like`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: this.user.id })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+          // Обновляем данные изображения
+          image.userLiked = data.liked;
+          image.likeCount = data.totalLikes;
+          
+          // Если это открытое изображение в модалке, обновляем и его
+          if (this.selectedImage && this.selectedImage.Id === image.Id) {
+            this.selectedImage.userLiked = data.liked;
+            this.selectedImage.likeCount = data.totalLikes;
+            // Загружаем список пользователей, поставивших лайк
+            await this.fetchLikesList(image.Id);
+          }
+        }
+      } catch (e) {
+        console.error('Ошибка лайка:', e);
+        this.message = 'Ошибка при изменении лайка';
+        setTimeout(() => this.message = '', 3000);
+      }
+    },
+    async toggleLikeModal() {
+      if (this.selectedImage) {
+        await this.toggleLike(this.selectedImage);
+      }
+    },
+    async fetchLikesList(imageId) {
+      if (!imageId) return;
+      
+      this.isLoadingLikes = true;
+      try {
+        const res = await fetch(`http://localhost:3000/images/${imageId}/likes-list`);
+        if (res.ok) {
+          const data = await res.json();
+          this.likesList = data;
+        }
+      } catch (e) {
+        console.error('Ошибка загрузки списка лайков:', e);
+      } finally {
+        this.isLoadingLikes = false;
+      }
+    },
     setupWebSocket() {
       this.ws = new WebSocket('ws://localhost:3000');
       
       this.ws.onopen = () => {
-        this.ws.send(JSON.stringify({
-          type: 'auth',
-          userId: this.user.id
-        }));
+        if (this.user && this.user.id) {
+          this.ws.send(JSON.stringify({
+            type: 'auth',
+            userId: this.user.id
+          }));
+        }
       };
       
       this.ws.onmessage = (event) => {
@@ -362,15 +469,29 @@ export default {
             this.images.unshift(data.image);
           }
           
-          // ФИКС ДУБЛИРОВАНИЯ КОММЕНТАРИЕВ
           if (data.type === 'new-comment') {
-            // Проверяем, что это комментарий для текущего изображения в модальном окне
             if (data.comment && data.comment.ImageId === this.currentImageId) {
               // Проверяем, нет ли уже такого комментария
               const commentExists = this.comments.some(c => c.Id === data.comment.Id);
               if (!commentExists) {
                 this.comments.unshift(data.comment);
               }
+            }
+          }
+          
+          // Обработка обновления лайков
+          if (data.type === 'like-updated') {
+            // Обновляем в списке изображений
+            const imageIndex = this.images.findIndex(img => img.Id === data.imageId);
+            if (imageIndex !== -1) {
+              this.images[imageIndex].likeCount = data.totalLikes;
+            }
+            
+            // Обновляем в модальном окне если открыто
+            if (this.selectedImage && this.selectedImage.Id === data.imageId) {
+              this.selectedImage.likeCount = data.totalLikes;
+              // Перезагружаем список лайков
+              this.fetchLikesList(data.imageId);
             }
           }
           
@@ -381,6 +502,10 @@ export default {
       
       this.ws.onerror = (error) => {
         console.error('WebSocket ошибка:', error);
+      };
+      
+      this.ws.onclose = () => {
+        console.log('WebSocket соединение закрыто');
       };
     },
     setupWebSocketSubscription(imageId) {
@@ -400,16 +525,12 @@ export default {
       }
     },
     onImageLoad(event) {
-      // Унифицированный размер для всех изображений в ленте
       const img = event.target;
       const container = img.parentElement;
       
-      // Устанавливаем фиксированный размер контейнера
       if (container) {
-        container.style.height = '400px'; // Фиксированная высота
+        container.style.height = '400px'; 
       }
-      
-      // Настраиваем изображение
       img.style.width = '100%';
       img.style.height = '100%';
       img.style.objectFit = 'cover';
@@ -629,7 +750,7 @@ export default {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  height: 450px; /* ФИКСИРОВАННАЯ ВЫСОТА ДЛЯ ВСЕХ КАРТОЧЕК */
+  height: 450px;
 }
 
 .image-card-full:hover {
@@ -641,7 +762,7 @@ export default {
 .image-wrapper {
   position: relative;
   width: 100%;
-  height: 350px; /* ФИКСИРОВАННАЯ ВЫСОТА ДЛЯ ИЗОБРАЖЕНИЙ */
+  height: 350px;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -649,7 +770,7 @@ export default {
 .thumbnail-full {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* ОБРЕЗКА ДЛЯ ЕДИНООБРАЗНОГО РАЗМЕРА */
+  object-fit: cover;
   transition: transform 0.5s;
 }
 
@@ -707,7 +828,11 @@ export default {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between;
+}
+
+.image-header {
+  margin-bottom: 10px;
 }
 
 .image-author {
@@ -722,6 +847,114 @@ export default {
   margin: 0;
   color: #888;
   font-size: 0.85rem;
+}
+
+/* Стили для лайков */
+.likes-section {
+  display: flex;
+  align-items: center;
+}
+
+.like-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid #444;
+  border-radius: 20px;
+  padding: 8px 15px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 0.9rem;
+}
+
+.like-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.like-button.liked {
+  background: rgba(255, 20, 60, 0.2);
+  border-color: #ff146c;
+}
+
+.like-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.like-icon {
+  font-size: 1.2rem;
+}
+
+.like-count {
+  font-weight: 500;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* Для модального окна */
+.like-button-modal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid #444;
+  border-radius: 20px;
+  padding: 6px 12px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 0.85rem;
+}
+
+.like-button-modal:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.like-button-modal.liked {
+  background: rgba(255, 20, 60, 0.2);
+  border-color: #ff146c;
+}
+
+/* Секция со списком лайков */
+.likes-section-modal {
+  margin-top: 20px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border-left: 3px solid #ff146c;
+}
+
+.likes-section-modal h4 {
+  margin: 0 0 10px 0;
+  color: #fff;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.likes-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 0.85rem;
+  color: #d0d0d0;
+}
+
+.like-user {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.like-user:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
 }
 
 /* Модальное окно - ИСПРАВЛЕННЫЙ РАЗМЕР */
@@ -743,7 +976,7 @@ export default {
   background: #0f0f0f;
   border-radius: 15px;
   width: 95%;
-  height: 95vh; 
+  height: 95vh;
   max-height: 95vh;
   display: flex;
   flex-direction: column;
@@ -811,7 +1044,7 @@ export default {
   justify-content: center;
   margin-bottom: 15px;
   min-height: 0;
-  max-height: calc(95vh - 200px);
+  max-height: calc(95vh - 250px);
 }
 
 .modal-image {
@@ -846,6 +1079,9 @@ export default {
 .detail-label {
   color: #888;
   font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .detail-value {
@@ -875,6 +1111,9 @@ export default {
   margin: 0;
   color: #fff;
   font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .comments-count {
@@ -1097,6 +1336,56 @@ export default {
   z-index: 1000;
   max-width: 250px;
   font-size: 0.9rem;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Анимация лайка */
+@keyframes heartBeat {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.2); }
+  50% { transform: scale(1); }
+  75% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.like-button.liked .like-icon {
+  animation: heartBeat 0.5s ease;
+}
+
+.like-button-modal.liked .like-icon {
+  animation: heartBeat 0.5s ease;
+}
+
+/* Индикатор загрузки лайков */
+.likes-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.likes-loading::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid #888;
+  border-top: 2px solid #4a9eff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 10px;
 }
 
 /* Адаптивность */
@@ -1111,6 +1400,10 @@ export default {
   
   .image-wrapper {
     height: 320px;
+  }
+  
+  .modal-body {
+    grid-template-columns: 2fr 1.5fr;
   }
 }
 
@@ -1133,6 +1426,15 @@ export default {
   .modal-content.dark-modal {
     height: 90vh;
     max-height: 90vh;
+  }
+  
+  .likes-section-modal {
+    margin-top: 15px;
+    padding: 12px;
+  }
+  
+  .likes-section-modal h4 {
+    font-size: 0.9rem;
   }
 }
 
@@ -1176,6 +1478,22 @@ export default {
   .header-left h1 {
     font-size: 1.5rem;
   }
+  
+  .upload-section {
+    margin: 15px;
+    padding: 20px;
+  }
+  
+  .modal-overlay {
+    padding: 5px;
+  }
+  
+  .modal-content.dark-modal {
+    width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
 }
 
 @media (max-width: 576px) {
@@ -1191,17 +1509,6 @@ export default {
   
   .image-wrapper {
     height: 300px;
-  }
-  
-  .modal-overlay {
-    padding: 5px;
-  }
-  
-  .modal-content.dark-modal {
-    width: 100%;
-    height: 100vh;
-    max-height: 100vh;
-    border-radius: 0;
   }
   
   .modal-header,
@@ -1221,5 +1528,133 @@ export default {
   .comment-avatar {
     margin-bottom: 8px;
   }
+  
+  .image-details {
+    padding: 12px;
+  }
+  
+  .detail-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+  
+  .like-button-modal {
+    align-self: flex-start;
+  }
+  
+  .likes-section-modal {
+    margin-top: 10px;
+    padding: 10px;
+  }
+  
+  .likes-list {
+    font-size: 0.8rem;
+  }
+}
+
+/* Стили для пустого состояния */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #888;
+}
+
+.empty-state h3 {
+  margin: 0 0 15px 0;
+  font-size: 1.2rem;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Тень для лучшей читаемости текста на изображениях */
+.image-overlay::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+  z-index: -1;
+}
+
+/* Улучшенные стили для кнопки лайка на маленьких экранах */
+@media (max-width: 400px) {
+  .like-button {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+  
+  .like-icon {
+    font-size: 1rem;
+  }
+  
+  .like-button-modal {
+    padding: 5px 10px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Дополнительные эффекты при наведении */
+.image-card-full:hover .likes-section .like-button:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Стили для состояния "нравится" */
+.like-button.liked:hover:not(:disabled) {
+  background: rgba(255, 20, 60, 0.3);
+  border-color: #ff2e7c;
+}
+
+/* Стили для индикатора загрузки при наведении на лайк */
+.like-button:disabled::after {
+  content: 'Нужна авторизация';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+  z-index: 100;
+}
+
+.like-button:disabled:hover::after {
+  opacity: 1;
+}
+
+/* Тот же эффект для модальной версии */
+.like-button-modal:disabled::after {
+  content: 'Нужна авторизация';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+  z-index: 100;
+}
+
+.like-button-modal:disabled:hover::after {
+  opacity: 1;
 }
 </style>
