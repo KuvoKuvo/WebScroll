@@ -1,13 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Auth from '@/AuthPage.vue';
 import Register from '@/RegistrationPage.vue';
-import Upload from '@/Upload.vue';
+import Upload from '@/Upload.vue'; // Добавляем импорт
 
 const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', component: Auth },
   { path: '/register', component: Register },
-  { path: '/upload', component: Upload }
+  { path: '/upload', component: Upload } // Добавляем маршрут
 ];
 
 const router = createRouter({
