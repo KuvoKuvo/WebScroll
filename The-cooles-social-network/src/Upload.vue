@@ -15,7 +15,7 @@
       </div>
     </header>
 
-    <div v-if="isAdmin" class="upload-section">
+    <div class="upload-section">
       <h2>Загрузить изображение</h2>
       <div class="upload-controls">
         <input 
@@ -81,6 +81,15 @@
                 <span class="like-count">{{ image.likeCount || 0 }}</span>
               </button>
             </div>
+            <div class="image-actions" v-if="isAdmin">
+              <button 
+                @click.stop="deleteImage(image.Id)" 
+                class="delete-button-small"
+                title="Удалить изображение"
+              >
+              🗑️
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -131,6 +140,15 @@
                     {{ selectedImage.userLiked ? '❤️' : '🤍' }}
                   </span>
                   <span class="like-count">{{ selectedImage.likeCount || 0 }}</span>
+                </button>
+              </div>
+              <div v-if="isAdmin" class="detail-item admin-actions">
+                <span class="detail-label">⚙️ Действия:</span>
+                <button 
+                  @click.stop="deleteImage(selectedImage.Id)" 
+                  class="delete-image-button"
+                >
+                🗑️ Удалить изображение
                 </button>
               </div>
             </div>
@@ -245,6 +263,47 @@ export default {
     }
   },
   methods: {
+    async deleteImage(imageId) {
+      if (!this.user || !this.isAdmin) {
+        this.message = 'У вас нет прав для удаления изображений';
+        setTimeout(() => this.message = '', 3000);
+        return;
+      }   
+
+      if (!confirm('Вы уверены, что хотите удалить это изображение? Это действие нельзя отменить.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`http://localhost:3000/images/${imageId}`, {
+          method: 'DELETE',
+          headers: {
+            'X-User-Id': this.user.id
+          }
+        });
+
+        const data = await res.json();
+    
+        if (res.ok) {
+          this.images = this.images.filter(img => img.Id !== imageId);
+      
+          if (this.selectedImage && this.selectedImage.Id === imageId) {
+            this.closeModal();
+          }
+      
+          this.message = '✅ Изображение успешно удалено';
+          setTimeout(() => this.message = '', 3000);
+      
+        } else {
+          this.message = '❌ ' + (data.message || 'Ошибка при удалении');
+          setTimeout(() => this.message = '', 3000);
+        }
+      } catch (e) {
+        this.message = '❌ Ошибка сети при удалении изображения';
+        setTimeout(() => this.message = '', 3000);
+        console.error('Ошибка удаления:', e);
+      }
+    },
     loadUser() {
       const userData = localStorage.getItem('user');
       if (userData) {
@@ -432,6 +491,7 @@ export default {
         this.isLoadingLikes = false;
       }
     },
+    
     setupWebSocket() {
       this.ws = new WebSocket('ws://localhost:3000');
       
@@ -450,6 +510,17 @@ export default {
           
           if (data.type === 'new-image') {
             this.images.unshift(data.image);
+          }
+          if (data.type === 'deleted-image') {
+            // Удаляем изображение из массива, если оно было удалено другим пользователем
+            this.images = this.images.filter(img => img.Id !== data.imageId);
+        
+            // Если удаляемое изображение открыто в модальном окне - закрываем его
+            if (this.selectedImage && this.selectedImage.Id === data.imageId) {
+              this.closeModal();
+              this.message = 'Изображение было удалено администратором';
+              setTimeout(() => this.message = '', 3000);
+            }
           }
           
           if (data.type === 'new-comment') {
@@ -730,7 +801,7 @@ body {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  height: 550px;
+  height: 600px;
 }
 
 .image-card-full:hover {
@@ -1365,5 +1436,59 @@ body {
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-right: 10px;
+}
+.delete-button-small {
+  background: rgba(255, 71, 87, 0.1);
+  border: 1px solid #ff4757;
+  color: #ff4757;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+}
+
+.delete-button-small:hover {
+  background: rgba(255, 71, 87, 0.2);
+  transform: translateY(-2px);
+}
+
+.delete-image-button {
+  background: linear-gradient(45deg, #ff4757, #ff3838);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.delete-image-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(255, 71, 87, 0.3);
+}
+
+.image-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.admin-actions .detail-value {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-end;
 }
 </style>

@@ -167,9 +167,7 @@ app.get('/images', (req, res) => {
       return res.status(500).json({ message: 'Ошибка сервера' });
     }
     
-    // Если пользователь авторизован, проверяем его лайки
     if (userId) {
-      // Получаем все лайки пользователя одним запросом
       const imageIds = rows.map(row => row.Id);
       if (imageIds.length > 0) {
         const placeholders = imageIds.map(() => '?').join(',');
@@ -208,14 +206,12 @@ app.get('/images/:id/likes', (req, res) => {
   const imageId = req.params.id;
   const userId = req.headers['x-user-id'];
   
-  // Получаем общее количество лайков
   db.get('SELECT COUNT(*) as count FROM Likes WHERE ImageId = ?', [imageId], (err, totalResult) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ message: 'Ошибка сервера' });
     }
-    
-    // Проверяем, поставил ли текущий пользователь лайк
+
     if (userId) {
       db.get('SELECT Id FROM Likes WHERE ImageId = ? AND UserId = ?', [imageId, userId], (err, userLike) => {
         if (err) {
@@ -248,13 +244,11 @@ app.post('/images/:id/like', (req, res) => {
     return res.status(401).json({ message: 'Не авторизован' });
   }
   
-  // Проверяем, существует ли изображение
   db.get('SELECT Id FROM Images WHERE Id = ?', [imageId], (err, image) => {
     if (!image) {
       return res.status(404).json({ message: 'Изображение не найдено' });
     }
     
-    // Проверяем, не поставил ли уже пользователь лайк
     db.get('SELECT Id FROM Likes WHERE ImageId = ? AND UserId = ?', [imageId, userId], (err, existingLike) => {
       if (err) {
         console.error(err);
@@ -262,21 +256,18 @@ app.post('/images/:id/like', (req, res) => {
       }
       
       if (existingLike) {
-        // Если лайк уже есть - удаляем его (дизлайк)
         db.run('DELETE FROM Likes WHERE Id = ?', [existingLike.Id], function(err) {
           if (err) {
             console.error(err);
             return res.status(500).json({ message: 'Ошибка сервера' });
           }
           
-          // Получаем обновленное количество лайков
           db.get('SELECT COUNT(*) as count FROM Likes WHERE ImageId = ?', [imageId], (err, result) => {
             if (err) {
               console.error(err);
               return res.status(500).json({ message: 'Ошибка сервера' });
             }
             
-            // Отправляем через WebSocket
             wss.clients.forEach(client => {
               if (client.readyState === WebSocket.OPEN) {
                 client.send(JSON.stringify({
@@ -296,7 +287,6 @@ app.post('/images/:id/like', (req, res) => {
           });
         });
       } else {
-        // Если лайка нет - добавляем
         db.run(
           'INSERT INTO Likes (ImageId, UserId, CreatedAt) VALUES (?, ?, ?)',
           [imageId, userId, Date.now()],
@@ -306,14 +296,12 @@ app.post('/images/:id/like', (req, res) => {
               return res.status(500).json({ message: 'Ошибка сервера' });
             }
             
-            // Получаем обновленное количество лайков
             db.get('SELECT COUNT(*) as count FROM Likes WHERE ImageId = ?', [imageId], (err, result) => {
               if (err) {
                 console.error(err);
                 return res.status(500).json({ message: 'Ошибка сервера' });
               }
               
-              // Отправляем через WebSocket
               wss.clients.forEach(client => {
                 if (client.readyState === WebSocket.OPEN) {
                   client.send(JSON.stringify({
@@ -363,38 +351,22 @@ app.get('/images/:id/likes-list', (req, res) => {
 });
 
 // Удаление изображения
-app.delete('/images/:id', (req, res) => {
-  const userId = req.headers['x-user-id'];
-  const imageId = req.params.id;
-
-  if (!userId) {
-    return res.status(401).json({ message: 'Не авторизован' });
+db.run('delete from Images where Id = ?', [imageId], err => {
+  if (err) {
+    return res.status(500).json({ message: 'Ошибка сервера' });
   }
-
-  db.get('select * from Users where Id = ?', [userId], (err, user) => {
-    if (!user || user.Role !== 1) {
-      return res.status(403).json({ message: 'Нет прав' });
+  
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type: 'deleted-image',
+        imageId: imageId
+      }));
     }
-
-    db.get('select * from Images where Id = ?', [imageId], (err, image) => {
-      if (!image) {
-        return res.status(404).json({ message: 'Картинка не найдена' });
-      }
-
-      const filePath = path.join(uploadDir, image.Filenshka);
-
-      fs.unlink(filePath, () => {
-        db.run('delete from Images where Id = ?', [imageId], err => {
-          if (err) {
-            return res.status(500).json({ message: 'Ошибка сервера' });
-          }
-          res.json({ message: 'Картинка удалена' });
-        });
-      });
-    });
   });
+  
+  res.json({ message: 'Картинка удалена' });
 });
-
 // Получение комментариев к изображению
 app.get('/images/:id/comments', (req, res) => {
   const imageId = req.params.id;
