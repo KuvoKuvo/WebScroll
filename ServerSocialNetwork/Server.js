@@ -351,21 +351,25 @@ app.get('/images/:id/likes-list', (req, res) => {
 });
 
 // Удаление изображения
-db.run('delete from Images where Id = ?', [imageId], err => {
-  if (err) {
-    return res.status(500).json({ message: 'Ошибка сервера' });
-  }
-  
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({
-        type: 'deleted-image',
-        imageId: imageId
-      }));
+app.delete('/images/:id', (req, res) => {
+  const imageId = req.params.id;
+
+  db.run('delete from Images where Id = ?', [imageId], err => {
+    if (err) {
+      return res.status(500).json({ message: 'Ошибка сервера' });
     }
+    
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: 'deleted-image',
+          imageId: imageId
+        }));
+      }
+    });
+    
+    res.json({ message: 'Картинка удалена' });
   });
-  
-  res.json({ message: 'Картинка удалена' });
 });
 // Получение комментариев к изображению
 app.get('/images/:id/comments', (req, res) => {
