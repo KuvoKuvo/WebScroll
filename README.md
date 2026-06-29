@@ -5,11 +5,11 @@
 ## 📱 Интерфейс приложения
 
 <p align="center">
-  <img src="./screenshots/feed.png" width="800" alt="Лента контента WebScroll">
+  <img src="The-cooles-social-network/screenshots/feed.png" width="800" alt="Лента контента WebScroll">
 </p>
 
 <p align="center">
-  <img src="./screenshots/details.png" width="800" alt="Просмотр фотографии и комментарии">
+  <img src="The-cooles-social-network/screenshots/details.png" width="800" alt="Просмотр фотографии и комментарии">
 </p>
 
 ## 🛠 Технологический стек
