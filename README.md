@@ -5,11 +5,11 @@
 ## 📱 Интерфейс приложения
 
 <p align="center">
-  <img src="screenshots/feed.jpg" width="800" alt="Лента контента WebScroll">
+  <img src="./screenshots/feed.png" width="800" alt="Лента контента WebScroll">
 </p>
 
 <p align="center">
-  <img src="screenshots/details.jpg" width="800" alt="Просмотр фотографии и комментарии">
+  <img src="./screenshots/details.png" width="800" alt="Просмотр фотографии и комментарии">
 </p>
 
 ## 🛠 Технологический стек
